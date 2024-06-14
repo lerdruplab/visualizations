@@ -1,0 +1,255 @@
+---
+title: "FerrajBubbleplot"
+output: html_document
+date: "2024-06-14"
+---
+
+Load relevant packages
+```{r setup, include=FALSE}
+library('tidyverse')
+library('ggplot2')
+```
+
+Loading in data and defining what is of interest
+```{r}
+#datafile and strain for analysis
+Datafile <- 'BALBnotinBL6.txt'
+table <- read_tsv(Datafile)
+strain <- gsub("notinBL6.txt", "", Datafile)
+
+#changeing name for BL6
+colnames(table)[colnames(table) == 'C57'] <- 'BL6'
+
+#make cluster 0 into 15
+table$cluster <- table$Cluster+1
+
+#list of clusters and insertion names
+allInsertions <-  c('L1', 'ERVK', 'B2', 'B1',	'ERVL-MaLR',	'ERVL', 'ERV1', 'B4')
+allClusters <- 1:15
+
+```
+The log2fold calculation
+
+```{r}
+#filtering out insertions that does not belong to any group
+straintable <- table
+straintable$collected <- (straintable$L1 + straintable$ERVK + straintable$B2 + straintable$B1 + straintable$'ERVL-MaLR' + straintable$ERVL + straintable$ERV1 +straintable$B4)
+straintable <- straintable %>% filter(collected != 0)
+
+#calculating the average distribution across all clusters
+totalcounts <- c(sum(straintable$L1),
+                 sum(straintable$ERVK),
+                 sum(straintable$B2),
+                 sum(straintable$B1),
+                 sum(straintable$'ERVL-MaLR'),
+                 sum(straintable$ERVL),
+                 sum(straintable$ERV1),
+                 sum(straintable$B4)
+)
+
+globaldf <- data.frame(x=allInsertions, counts=totalcounts)
+finalmatrix <- matrix(0, nrow = length(allInsertions), ncol = length(allClusters))
+rownames(finalmatrix) <- allInsertions
+colnames(finalmatrix) <- allClusters
+
+
+#creating nested loop as to make a table with cluster/logfold for chosen strain
+for (INSx in allInsertions) {
+  for (clusterx in allClusters) {
+    cluster1 <- straintable %>% 
+      select('FVB', 'CBA', 'BALB', 'BL6', 'L1', 'ERVK', 'B2',	'B1',	'ERVL-MaLR', 'ERVL', 'ERV1', 'B4', 'cluster') %>% filter(cluster == clusterx )
+    
+    counts <- c(sum(cluster1$L1),
+                sum(cluster1$ERVK),
+                sum(cluster1$B2),
+                sum(cluster1$B1),
+                sum(cluster1$'ERVL-MaLR'),
+                sum(cluster1$ERVL),
+                sum(cluster1$ERV1),
+                sum(cluster1$B4))
+    
+    localdf <- data.frame(x=allInsertions, counts=counts)
+    localdf <- localdf %>% mutate(across(where(is.numeric), ~ .x + 1)) #adding 1 to every value to avoid 0
+    
+    globaldf$freq <- globaldf$counts/sum(globaldf$counts)
+    totallocalcounts <- sum(localdf$counts)
+    localdf$expectedcounts <- totallocalcounts*globaldf$freq
+    localdf$logfoldchange <- log2(localdf$counts/localdf$expectedcounts)
+    
+    finalmatrix[INSx, as.character(clusterx)] <- localdf$logfoldchange[which(localdf$x == INSx)]
+    
+  }
+}
+
+finaldf <- as.data.frame(as.table(finalmatrix))
+
+# Rename the columns for clarity
+colnames(finaldf) <- c("INSx", "Clusterx", "Log2foldchange")
+
+```
+
+Doing the statistical analysis 
+
+```{r}
+
+#defining the chi square test function
+perform_chi_square_test <- function(row) {
+  matrix_data <- matrix(c(row$INSin, row$INSout, row$nonINSin, row$nonINSout), nrow = 2, byrow = TRUE)
+  test_result <- chisq.test(matrix_data, correct = FALSE)
+  return(test_result)
+}
+
+finalmatrix <- matrix(NA, nrow = length(allClusters), ncol = length(allInsertions))
+colnames(finalmatrix) <- allInsertions
+rownames(finalmatrix) <- allClusters
+
+
+for (INSx in allInsertions) {
+  list1 <- c()
+  list2 <- c()
+  list3 <- c()
+  list4 <- c()
+  for (clusterx in allClusters) {
+    
+    INSin <- table %>% filter(.data[[INSx]] == 0) %>% filter(cluster == clusterx) 
+    INSout <- table %>% filter(.data[[INSx]] == 1) %>% filter(cluster == clusterx) 
+    nonINSin <- table %>% filter(.data[[INSx]] == 0) %>% filter(cluster != clusterx) 
+    nonINSout <- table %>% filter(.data[[INSx]] == 1) %>% filter(cluster != clusterx)
+    list1<- append(list1, nrow(INSin))
+    list2<- append(list2, nrow(INSout))
+    list3<- append(list3, nrow(nonINSin))
+    list4<- append(list4, nrow(nonINSout))
+    
+    df <- data.frame(list2, list4, list1, list3)
+    names(df) <- c('INSin','INSout','nonINSin','nonINSout')
+    df <- df %>% mutate(across(where(is.numeric), ~ .x + 1)) #adding 1 to every value to avoid 0
+    df2 <- tibble(df)
+    
+    chi_square_results <- df2 %>% 
+      rowwise() %>% 
+      mutate(
+        test_result = list(perform_chi_square_test(cur_data()))
+      ) %>% 
+      ungroup() %>% 
+      mutate(
+        chi_square_statistic = map_dbl(test_result, ~ .x$statistic),
+        p_value = map_dbl(test_result, ~ .x$p.value),
+        expected_frequencies = map(test_result, ~ .x$expected)
+      ) %>% 
+      select(-test_result)
+    
+    pval <- chi_square_results$p_value
+    p_adjusted <- p.adjust(pval, method = 'BH')
+    chi_square_results$p_adjusted <- p_adjusted
+    chi_square_results$x <- as.numeric(row.names(chi_square_results))
+    
+    finalmatrix[clusterx, as.character(INSx)] <- chi_square_results$p_value[which(chi_square_results$x == clusterx)]
+    
+  }
+}
+
+#matrix with adjusted p-values:
+p_vector <- as.vector(finalmatrix)
+
+# Step 2: Apply the p-value adjustment (Benjamini-Hochberg)
+p_adjusted_vector <- p.adjust(p_vector, method = "BH")
+
+# Step 3: Reshape the adjusted p-values vector back into the original matrix dimensions
+adjusted_p_matrix <- matrix(p_adjusted_vector, nrow = nrow(finalmatrix), ncol = ncol(finalmatrix))
+colnames(adjusted_p_matrix) <- allInsertions
+rownames(adjusted_p_matrix) <- allClusters
+
+
+
+finaldf2 <- as.data.frame(as.table(adjusted_p_matrix))
+
+# Rename the columns for clarity
+colnames(finaldf2) <- c("Clusterx2", "INSx2", "pvalue")
+
+```
+
+
+Plots
+
+```{r}
+finaldf2$ID <- paste(finaldf2$Clusterx, finaldf2$INSx)
+finaldf$ID <- paste(finaldf$Clusterx, finaldf$INSx)
+
+
+df_merge <- merge(finaldf, finaldf2,by="ID") 
+
+colnames(df_merge)[colnames(df_merge) == 'Adjusted P-value'] <- 'pvalue'
+
+# Modify the significance column to numeric values
+df_merge$significance <- with(df_merge, ifelse(pvalue > 0.05, 0, ifelse(pvalue > 0.02, 1, ifelse(pvalue > 0.01, 2, 3))))
+
+# Plot using the modified significance column
+ggplot(df_merge, aes(y = Clusterx, x = INSx, color = Log2foldchange, size = significance)) +
+  geom_point(alpha = 1) +
+  theme_minimal() +
+  labs(title = "BL6 clusters and insertion types",
+       x = "Cluster",
+       y = "Insertion Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_size_continuous(range = c(1, 10)) +  # Adjust the range to control the size of the points
+  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0)
+
+```
+
+
+```{r}
+finaldf2$ID <- paste(finaldf2$Clusterx, finaldf2$INSx)
+finaldf$ID <- paste(finaldf$Clusterx, finaldf$INSx)
+
+
+df_merge <- merge(finaldf, finaldf2,by="ID") 
+
+colnames(df_merge)[colnames(df_merge) == 'Adjusted P-value'] <- 'pvalue'
+
+# Modify the significance column to numeric values
+df_merge$logsignificance <- -log10(df_merge$pvalue)
+
+# Plot using the modified significance column
+ggplot(df_merge, aes(y = Clusterx, x = INSx, color = Log2foldchange, size = logsignificance)) +
+  geom_point(alpha = 1) +
+  theme_minimal() +
+  labs(title = "BL6 clusters and insertion types",
+       x = "Cluster",
+       y = "Insertion Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_size_continuous(range = c(1, 10)) +  # Adjust the range to control the size of the points
+  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0)
+
+```
+```{r}
+df_merge2 <- subset(df_merge, Clusterx2 != 12)
+
+
+ggplot(df_merge2, aes(y = Clusterx, x = INSx, color = Log2foldchange, size = logsignificance)) +
+  geom_point(alpha = 1) +
+  theme_minimal() +
+  labs(title = "BL6 clusters and insertion types",
+       x = "Cluster",
+       y = "Insertion Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_size_continuous(range = c(1, 10)) +  # Adjust the range to control the size of the points
+  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
