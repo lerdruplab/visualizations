@@ -13,12 +13,13 @@ library('ggplot2')
 Loading in data and defining what is of interest
 ```{r}
 #datafile and inserions for analysis
-Datafile <- 'BALBnotinBL6.txt'
-allInsertions <-  c('L1', 'ERVK', 'B2', 'B1',	'ERVL-MaLR',	'ERVL', 'ERV1', 'B4')
+Datafile <- 'DBAnotinBL6.txt'
+allInsertions <-  c('MTA_Mm;', 'IAP', 'RLTR10;', 'MT2_Mm;', 'RLTR17B_Mm;')
+#allInsertions <-  c('L1', 'ERVK', 'B2', 'B1',	'ERVL-MaLR',	'ERVL', 'ERV1', 'B4')
 
 #load data
-allClusters <- 1:(nrow(table(table$Cluster)))
 table <- read_tsv(Datafile)
+allClusters <- 1:(nrow(table(table$Cluster)))
 
 #changeing names and depending on if cluster or group, rename
 colnames(table)[colnames(table) == 'C57'] <- 'BL6'
@@ -39,15 +40,8 @@ straintable$collected <- (straintable$L1 + straintable$ERVK + straintable$B2 + s
 straintable <- straintable %>% filter(collected != 0)
 
 #calculating the average distribution across all clusters
-totalcounts <- c(sum(straintable$L1),
-                 sum(straintable$ERVK),
-                 sum(straintable$B2),
-                 sum(straintable$B1),
-                 sum(straintable$'ERVL-MaLR'),
-                 sum(straintable$ERVL),
-                 sum(straintable$ERV1),
-                 sum(straintable$B4)
-)
+totalcounts <- sapply(allInsertions, function(col) sum(straintable[[col]], na.rm = FALSE))
+
 
 globaldf <- data.frame(x=allInsertions, counts=totalcounts)
 finalmatrix <- matrix(0, nrow = length(allInsertions), ncol = length(allClusters))
@@ -59,16 +53,9 @@ colnames(finalmatrix) <- allClusters
 for (INSx in allInsertions) {
   for (clusterx in allClusters) {
     cluster1 <- straintable %>% 
-      select('FVB', 'CBA', 'BALB', 'BL6', 'L1', 'ERVK', 'B2',	'B1',	'ERVL-MaLR', 'ERVL', 'ERV1', 'B4', 'cluster') %>% filter(cluster == clusterx )
+      select('FVB', 'CBA', 'BALB', 'BL6', 'cluster', allInsertions) %>% filter(cluster == clusterx )
     
-    counts <- c(sum(cluster1$L1),
-                sum(cluster1$ERVK),
-                sum(cluster1$B2),
-                sum(cluster1$B1),
-                sum(cluster1$'ERVL-MaLR'),
-                sum(cluster1$ERVL),
-                sum(cluster1$ERV1),
-                sum(cluster1$B4))
+    counts <- sapply(allInsertions, function(col) sum(cluster1[[col]], na.rm = FALSE))
     
     localdf <- data.frame(x=allInsertions, counts=counts)
     localdf <- localdf %>% mutate(across(where(is.numeric), ~ .x + 1)) #adding 1 to every value to avoid 0
