@@ -12,25 +12,27 @@ library('ggplot2')
 
 Loading in data and defining what is of interest
 ```{r}
-#datafile and strain for analysis
+#datafile and inserions for analysis
 Datafile <- 'BALBnotinBL6.txt'
-table <- read_tsv(Datafile)
-strain <- gsub("notinBL6.txt", "", Datafile)
-
-#changeing name for BL6
-colnames(table)[colnames(table) == 'C57'] <- 'BL6'
-
-#make cluster 0 into 15
-table$cluster <- table$Cluster+1
-
-#list of clusters and insertion names
 allInsertions <-  c('L1', 'ERVK', 'B2', 'B1',	'ERVL-MaLR',	'ERVL', 'ERV1', 'B4')
-allClusters <- 1:15
+
+#load data
+allClusters <- 1:(nrow(table(table$Cluster)))
+table <- read_tsv(Datafile)
+
+#changeing names and depending on if cluster or group, rename
+colnames(table)[colnames(table) == 'C57'] <- 'BL6'
+colnames(table)[colnames(table) == 'Group order'] <- 'group'
+table$cluster <- table$Cluster+1
+table$cluster <- table$group
 
 ```
+
+
 The log2fold calculation
 
 ```{r}
+
 #filtering out insertions that does not belong to any group
 straintable <- table
 straintable$collected <- (straintable$L1 + straintable$ERVK + straintable$B2 + straintable$B1 + straintable$'ERVL-MaLR' + straintable$ERVL + straintable$ERV1 +straintable$B4)
@@ -90,7 +92,8 @@ colnames(finaldf) <- c("INSx", "Clusterx", "Log2foldchange")
 
 Doing the statistical analysis 
 
-```{r}
+Warnings are silenced, as there will be warnings where it finds a 0.
+```{r, warning=FALSE}
 
 #defining the chi square test function
 perform_chi_square_test <- function(row) {
@@ -122,7 +125,7 @@ for (INSx in allInsertions) {
     
     df <- data.frame(list2, list4, list1, list3)
     names(df) <- c('INSin','INSout','nonINSin','nonINSout')
-    df <- df %>% mutate(across(where(is.numeric), ~ .x + 1)) #adding 1 to every value to avoid 0
+    #df <- df %>% mutate(across(where(is.numeric), ~ .x + 1)) #adding 1 to every value to avoid 0
     df2 <- tibble(df)
     
     chi_square_results <- df2 %>% 
@@ -183,17 +186,6 @@ colnames(df_merge)[colnames(df_merge) == 'Adjusted P-value'] <- 'pvalue'
 # Modify the significance column to numeric values
 df_merge$significance <- with(df_merge, ifelse(pvalue > 0.05, 0, ifelse(pvalue > 0.02, 1, ifelse(pvalue > 0.01, 2, 3))))
 
-# Plot using the modified significance column
-ggplot(df_merge, aes(y = Clusterx, x = INSx, color = Log2foldchange, size = significance)) +
-  geom_point(alpha = 1) +
-  theme_minimal() +
-  labs(title = "BL6 clusters and insertion types",
-       x = "Cluster",
-       y = "Insertion Type") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_size_continuous(range = c(1, 10)) +  # Adjust the range to control the size of the points
-  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0)
-
 ```
 
 
@@ -221,9 +213,16 @@ ggplot(df_merge, aes(y = Clusterx, x = INSx, color = Log2foldchange, size = logs
   scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0)
 
 ```
-```{r}
-df_merge2 <- subset(df_merge, Clusterx2 != 12)
 
+Plot, excluding clusters that has a size of 1:
+
+```{r}
+clustersizes <- data.frame(table(table$group))
+smallclusters <- clustersizes %>% filter(Freq == 1)
+
+clusterout <- c(smallclusters$Var1)
+
+df_merge2 <- subset(df_merge, Clusterx2 != clusterout)
 
 ggplot(df_merge2, aes(y = Clusterx, x = INSx, color = Log2foldchange, size = logsignificance)) +
   geom_point(alpha = 1) +
@@ -236,20 +235,3 @@ ggplot(df_merge2, aes(y = Clusterx, x = INSx, color = Log2foldchange, size = log
   scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0)
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
