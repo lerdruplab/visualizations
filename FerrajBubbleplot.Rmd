@@ -13,9 +13,10 @@ library('ggplot2')
 Loading in data and defining what is of interest
 ```{r}
 #datafile and inserions for analysis
-Datafile <- 'DBAnotinBL6.txt'
+Datafile <- 'FVBnotinBL6.txt'
 allInsertions <-  c('MTA_Mm;', 'IAP', 'RLTR10;', 'MT2_Mm;', 'RLTR17B_Mm;')
 #allInsertions <-  c('L1', 'ERVK', 'B2', 'B1',	'ERVL-MaLR',	'ERVL', 'ERV1', 'B4')
+strain <- gsub("notinBL6.txt", "", Datafile)
 
 #load data
 table <- read_tsv(Datafile)
@@ -187,19 +188,32 @@ colnames(df_merge)[colnames(df_merge) == 'Adjusted P-value'] <- 'pvalue'
 
 # Modify the significance column to numeric values
 df_merge$logsignificance <- -log10(df_merge$pvalue)
+df_merge$Clusterx = as.numeric(df_merge$Clusterx)
 
 # Plot using the modified significance column
-ggplot(df_merge, aes(y = Clusterx, x = INSx, color = Log2foldchange, size = logsignificance)) +
-  geom_point(alpha = 1) +
+a <- ggplot(df_merge, aes(y = Clusterx, x = INSx, size = logsignificance)) +
+  geom_point(aes(color = Log2foldchange)) +
   theme_minimal() +
-  labs(title = "BL6 clusters and insertion types",
-       x = "Cluster",
-       y = "Insertion Type") +
+  labs(title = paste(strain, "clusters and insertion types"),
+       x = "Inserition type",
+       y = "Cluster") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_size_continuous(range = c(1, 10)) +  # Adjust the range to control the size of the points
-  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0)
+#  scale_size_continuous(range = c(1, 10)) +             # Adjust the range to control the size of the points for only one plot
+  scale_y_reverse(breaks=1:20) +
+  scale_size(range = c(1, 15), limits = c(0,20)) +  # this used to compare between plots. to make them comparable, range decides size and limits decides top value
+  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0, limits = c(-2, 2)) #Limit sets the top and bottom, but values that falls outside this catrgory will be grey
+
+
+a
+
+
+plotname <- paste(strain, 'plot', sep = "")
+assign(plotname, a)
+
 
 ```
+
+If wanted:
 
 Plot, excluding clusters that has a size of 1:
 
@@ -207,18 +221,28 @@ Plot, excluding clusters that has a size of 1:
 clustersizes <- data.frame(table(table$group))
 smallclusters <- clustersizes %>% filter(Freq == 1)
 
-clusterout <- c(smallclusters$Var1)
 
+if (nrow(smallclusters) > 0) {
+clusterout <- c(smallclusters$Var1)
 df_merge2 <- subset(df_merge, Clusterx2 != clusterout)
 
-ggplot(df_merge2, aes(y = Clusterx, x = INSx, color = Log2foldchange, size = logsignificance)) +
-  geom_point(alpha = 1) +
+a1 <- ggplot(df_merge2, aes(y = Clusterx, x = INSx, size = logsignificance)) +
+  geom_point(alpha = 2, aes(color = Log2foldchange)) +
   theme_minimal() +
-  labs(title = "BL6 clusters and insertion types",
-       x = "Cluster",
-       y = "Insertion Type") +
+  labs(title = paste(strain, "clusters and insertion types"),
+       x = "Inserition type",
+       y = "Cluster") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_size_continuous(range = c(1, 10)) +  # Adjust the range to control the size of the points
-  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0)
+#  scale_size_continuous(range = c(1, 5)) +             # Adjust the range to control the size of the points for only one plot
+  scale_y_reverse(breaks=1:20) +
+  scale_size(range = c(1, 15), limits = c(0,20)) + # this used to compare between plots. to make them comparable, range decides size and limits decides top value
+  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0, limits = c(-2, 2))
+
+a1
+} else {
+a1 <- a
+}
+
+a1
 
 ```
