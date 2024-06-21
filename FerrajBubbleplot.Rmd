@@ -13,7 +13,7 @@ library('ggplot2')
 Loading in data and defining what is of interest
 ```{r}
 #datafile and inserions for analysis
-Datafile <- 'FVBnotinBL6.txt'
+Datafile <- 'BALBnotinBL6.txt'
 allInsertions <-  c('MTA_Mm;', 'IAP', 'RLTR10;', 'MT2_Mm;', 'RLTR17B_Mm;')
 #allInsertions <-  c('L1', 'ERVK', 'B2', 'B1',	'ERVL-MaLR',	'ERVL', 'ERV1', 'B4')
 strain <- gsub("notinBL6.txt", "", Datafile)
@@ -190,6 +190,10 @@ colnames(df_merge)[colnames(df_merge) == 'Adjusted P-value'] <- 'pvalue'
 df_merge$logsignificance <- -log10(df_merge$pvalue)
 df_merge$Clusterx = as.numeric(df_merge$Clusterx)
 
+# Modify so that the logfolds are max 2 and min -2 
+df_merge$Log2foldchange <- with(df_merge, ifelse(Log2foldchange > 2, 2, ifelse(Log2foldchange < -2, -2, Log2foldchange)))
+
+
 # Plot using the modified significance column
 a <- ggplot(df_merge, aes(y = Clusterx, x = INSx, size = logsignificance)) +
   geom_point(aes(color = Log2foldchange)) +
@@ -201,8 +205,7 @@ a <- ggplot(df_merge, aes(y = Clusterx, x = INSx, size = logsignificance)) +
 #  scale_size_continuous(range = c(1, 10)) +             # Adjust the range to control the size of the points for only one plot
   scale_y_reverse(breaks=1:20) +
   scale_size(range = c(1, 15), limits = c(0,20)) +  # this used to compare between plots. to make them comparable, range decides size and limits decides top value
-  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0, limits = c(-2, 2)) #Limit sets the top and bottom, but values that falls outside this catrgory will be grey
-
+  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0) #Limit sets the top and bottom
 
 a
 
@@ -246,3 +249,6 @@ a1 <- a
 a1
 
 ```
+
+
+
