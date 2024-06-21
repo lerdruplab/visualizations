@@ -190,8 +190,9 @@ colnames(df_merge)[colnames(df_merge) == 'Adjusted P-value'] <- 'pvalue'
 df_merge$logsignificance <- -log10(df_merge$pvalue)
 df_merge$Clusterx = as.numeric(df_merge$Clusterx)
 
-# Modify so that the logfolds are max 2 and min -2 
+# Modify so that the logfolds are max 2 and min -2 and that the significance is maximum 20
 df_merge$Log2foldchange <- with(df_merge, ifelse(Log2foldchange > 2, 2, ifelse(Log2foldchange < -2, -2, Log2foldchange)))
+df_merge$logsignificance <- with(df_merge, ifelse(logsignificance > 20, 20, logsignificance))
 
 
 # Plot using the modified significance column
