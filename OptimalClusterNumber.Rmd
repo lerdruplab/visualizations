@@ -1,0 +1,196 @@
+---
+title: "OptimalClusteringNumber"
+output: html_document
+date: "2024-07-27"
+---
+
+Loading packages
+```{r}
+library('ggplot2')
+library('tidyverse')
+```
+
+Loading the data taht was pulled from the individual heatmaps
+```{r}
+# naming of file needs to be 3 digit name + rep1/rep2 + cluster with 2 digits ex 06 or 12
+# remember to change the working directory/path/filenames so it fits the current analysis
+
+# loading all heatmaps, here saved in a folder called heatmapdata2
+files <- list.files(path = "heatmapdata2", full.names = TRUE)
+
+# loading table from EaSeq where we have information of clusternumbers
+clustertable <- read_tsv('OptimalClustersize/CollecteDataframe.txt')
+clustertable <- clustertable[-nrow(clustertable), ]
+
+
+# Iterating through all the heatmaps and saving them as matrices
+for (file in files) {
+currentdata <- read.table(file, skip = 8)
+
+currentname <- str_sub(file, 14, 29)
+#currentname <- gsub('0', '', currentname) maybe not needed, but would be nice for later maybe
+currentcluster <- str_sub(file, 28, 29)
+currentcluster <- gsub('^0', '', currentcluster)
+
+# Defining what data to use and the amount of clusters, here named "Cluster with x", x being the current cluster
+clustercolumn <- paste('Cluster', 'with', currentcluster, sep = " ")
+heatmap <- currentdata
+clusterchosen <- clustertable[[clustercolumn]]
+
+# Adding cluster numbers in the individual dataframe and adding 1
+clusterchosen <- sort(as.vector(clusterchosen))
+heatmap$clusternr <- clusterchosen
+allclusters <- 1:(nrow(table(heatmap$clusternr)))
+heatmap$clusternr <- heatmap$clusternr+1
+
+
+finalmatrix <- matrix(NA, nrow = length(allclusters), ncol = 199)
+
+# Saving the average signal across each bin in each cluster + removing clusters that are between 1-5 insertions only
+for (clusterx in allclusters) {
+  value_counts <- heatmap %>% count(clusternr)
+  values_to_remove <- value_counts %>% filter(n >= 1 & n <= 5) %>% pull(clusternr)
+  heatmap <- heatmap %>% filter(!(clusternr %in% values_to_remove))
+  df <- heatmap %>% filter(clusternr == clusterx) 
+  df <- df %>% select(-clusternr) 
+  mean_values <- apply(df, 2, mean)
+  finalmatrix[clusterx,] <- mean_values
+}
+
+finalmatrix <- na.omit(finalmatrix)
+currentmatrix <- paste(currentname)
+assign(currentname, finalmatrix)
+
+}
+
+```
+
+Second step, is calulating the absolute differences between strain/strain comparison,
+together with the replicate/replicate comparison
+
+```{r}
+# calculating the difference between replicates and strain heatmaps, for each cluster
+numbers <- c('05','06', '08', 10, 12, 14, 15, 16, 18, 20, 22, 24, 25, 26, 28, 30)
+
+for (i in numbers) {
+  rep1_var <- paste0("BL6rep1cluster", i)
+  rep2_var <- paste0("BL6rep2cluster", i)
+  result_var <- paste0("repmatrix", i)
+  
+  rep1 <- get(rep1_var)
+  rep2 <- get(rep2_var)
+  
+  # Calculate the absolute difference and storing the results
+  result <- abs(rep1 - rep2)
+  assign(result_var, result)
+}
+
+
+for (i in numbers) {
+  opp1_var <- paste0("BL6rep1cluster", i)
+  opp2_var <- paste0("DBArep1cluster", i)
+  result_var <- paste0("oppmatrix", i)
+  
+  opp1 <- get(opp1_var)
+  opp2 <- get(opp2_var)
+  
+  # Calculate the absolute difference and storing the results
+  result <- abs(opp1 - opp2)
+  assign(result_var, result)
+}
+
+```
+
+
+Lastly, generating different plots to give an idea of how these numbers actually look
+
+```{r}
+y <- c(mean(repmatrix06),mean(repmatrix08),mean(repmatrix10), mean(repmatrix12), mean(repmatrix14), mean(repmatrix16), mean(repmatrix18), mean(repmatrix20), mean(repmatrix22), mean(repmatrix24), mean(repmatrix26), mean(repmatrix28), mean(repmatrix30))
+x <- c(6,8,10,12,14,16,18,20,22,24,26,28,30)
+
+df <- data.frame(x, y)
+ggplot(data=df, aes(x=x, y=y)) +
+  geom_line()+
+  ggtitle("Replicate average difference")+
+  geom_point(size = 1) +
+  theme_minimal()
+
+y1 <- c(mean(oppmatrix06),mean(oppmatrix08),mean(oppmatrix10), mean(oppmatrix12), mean(oppmatrix14), mean(oppmatrix16), mean(oppmatrix18), mean(oppmatrix20), mean(oppmatrix22), mean(oppmatrix24), mean(oppmatrix26), mean(oppmatrix28), mean(oppmatrix30))
+
+df1 <- data.frame(x, y1)
+ggplot(data=df1, aes(x=x, y=y1)) +
+  geom_line()+
+  ggtitle("Strain/strain average difference")+
+  geom_point(size = 1) +
+  theme_minimal()
+
+
+#combined strain/strain and replicates comparison
+dfcombined <- data.frame(x, y, y1)
+ggplot(dfcombined, aes(x=x)) + 
+  geom_line(aes(y = y), color = "darkred") + 
+  geom_line(aes(y = y1), color="steelblue")+
+  theme_minimal()
+
+
+
+x <- -99:99
+y <- apply(repmatrix05, 2, mean)
+y1 <- apply(repmatrix10, 2, mean)
+y2 <- apply(repmatrix15, 2, mean)
+y3 <- apply(repmatrix20, 2, mean)
+y4 <- apply(repmatrix25, 2, mean)
+y5 <- apply(repmatrix30, 2, mean)
+
+# Create a data frame
+df <- data.frame(
+  "Position" = x,
+  "clusters05" = y,
+  "clusters10" = y1,
+  "clusters15" = y2,
+  "clusters20" = y3,
+  "clusters25" = y4,
+  "clusters30" = y5
+)
+
+
+longdf <- df %>% pivot_longer(!Position, names_to = "Number of clusters", values_to = "value")
+
+#plots made with the long form
+gfg_plot <- ggplot(longdf, aes(x = Position, y = value, color = `Number of clusters`)) +  
+  geom_line() +
+  theme_minimal()
+
+# Display the plot
+print(gfg_plot)
+
+
+# Plot multiple lines using matplot
+matplot(x, cbind(y, y1, y2, y3, y4, y5), type = "l", lty = 1, 
+        col = c("#ADD8E6", "#87CEEB", "#6495ED", "#4682B4", "#4169E1", "#191970"), xlab = "Bin", 
+        ylab = "Mean difference", main = "Average difference across bins for replicates")
+legend("topright", legend = c("5 clusters", "10 clusters", "15 clusters", "20 clusters", "25 clusters", "30 clusters"), 
+       col = c("#ADD8E6", "#87CEEB", "#6495ED", "#4682B4", "#4169E1", "#191970"), 
+       lty = 1)
+
+
+
+x <- -99:99
+y <- apply(oppmatrix05, 2, mean)
+y1 <- apply(oppmatrix10, 2, mean)
+y2 <- apply(oppmatrix15, 2, mean)
+y3 <- apply(oppmatrix20, 2, mean)
+y4 <- apply(oppmatrix25, 2, mean)
+y5 <- apply(oppmatrix30, 2, mean)
+
+# Plot multiple lines using matplot
+matplot(x, cbind(y, y1, y2, y3, y4, y5), type = "l", lty = 1, 
+        col = c("#ADD8E6", "#87CEEB", "#6495ED", "#4682B4", "#4169E1", "#191970"), xlab = "Bin", 
+        ylab = "Mean difference", main = "Average difference across bins for strain/strain difference")
+legend("topright", legend = c("5 clusters", "10 clusters", "15 clusters", "20 clusters", "25 clusters", "30 clusters"), 
+       col = c("#ADD8E6", "#87CEEB", "#6495ED", "#4682B4", "#4169E1", "#191970"), 
+       lty = 1)
+```
+
+
+
