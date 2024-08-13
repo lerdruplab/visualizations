@@ -62,8 +62,8 @@ ggplot(df2, aes(x = pos)) +
   geom_line(aes(y = meanbackground, color = "meanbackground"), size = 1) +
   geom_line(aes(y = finalsums, color = "finalsums"), size = 1) +
   geom_line(aes(y = meansums, color = "meansums"), size = 1) +
-  scale_color_manual(values=c('#6495ED','#999999', '#87CEEB'))+
-  labs(x = "Bin", y = "Signal", title = "BL6/DBA insetion variation, 1 million basepair window, 200 bins") +
+  scale_color_manual(values=c('#6495ED','#999999', '#87CEEB'), name ="Absolute", labels = c("Adjusted signal", "Background",  "Signal"))+
+  labs(x = "Bin", y = "Signal", title = "BL6/DBA H3K4me3 signal variation at insertions sites - 1 million basepair window - 200 bins") +
   theme_minimal()
 
 # visualization of the individual bins, with the option to chose to colour some of choise. 
