@@ -10,7 +10,92 @@ library('ggplot2')
 library('tidyverse')
 ```
 
-Loading the data taht was pulled from the individual heatmaps
+
+Estimating the optimal cluster number from one single heatmap
+```{r}
+# Number of bins definec
+pos <- -99:99
+
+folder <- 'OptimalClustersize/'
+
+# Create a vector of file indices
+nrclusters <- 5:30
+
+# Loop through the file indices and read the tables, named x_1, 
+#x being the nr of clusters, and _1 indicating it is the first replicate
+for (i in nrclusters) {
+  assign(paste0("x", i), read.table(paste0(folder, i, "_1.txt"), skip = 8))
+}
+
+clustertable <- read_tsv('OptimalClustersize/CollecteDataframe.txt')
+clustertable <- clustertable[-nrow(clustertable), ]
+
+results_df <- data.frame(cluster_number = integer(), mean_value = numeric())
+
+for (i in 5:30) {
+# Defining the heatmap to analyze and what cluster
+heatmap_name <- paste0('x', i)
+heatmap <- get(heatmap_name)
+column <- paste('Cluster with', i)
+clusterchosen <- clustertable[[column]]
+
+# Adding cluster numbers in the individual dataframe and adding 1
+clusterchosen <- sort(as.vector(clusterchosen))
+heatmap$clusternr <- clusterchosen
+allclusters <- 1:(nrow(table(heatmap$clusternr)))
+heatmap$clusternr <- heatmap$clusternr+1
+
+# customizing MAD function so the it is mean and not median
+custom_mad <- function(x) {
+  mad(x, center = mean(x))
+}
+
+
+mad_results <- c()
+for (clusterx in allclusters) {
+  df <- heatmap %>% filter(clusternr == clusterx)
+  df <- df %>% select(-clusternr)
+  mad_values <- apply(df, 2, custom_mad)
+  mean_mad_value <- mean(mad_values)
+  #print(mean(mad_values))
+  mad_results <- c(mad_results, mean_mad_value)
+}
+
+
+mean(mad_results)
+
+#with the zeros
+#x = c(5, 10, 15, 20, 25, 30)
+#y = c(0.4999286, 0.5065915, 0.531052, 0.5183138, 0.5489617, 0.5445573)
+#plot(x,y, type = "l")
+
+
+#zeros are removed
+vector_no_zeros <- mad_results[mad_results != 0]
+mean_value <- mean(vector_no_zeros)
+
+# Append the results to the dataframe
+results_df <- rbind(results_df, data.frame(cluster_number = i, mean_value = mean_value))
+
+}
+
+plot(results_df, type = 'l')
+
+
+ggplot(data=results_df, aes(y=mean_value, x=cluster_number)) +
+  labs(x = "k", y = "Mean cluster variation", title = "Mean cluster variation in DBA Heatmap") +
+  geom_line()+
+  geom_point() +
+  geom_smooth() +
+  theme(text=element_text(size=40)) +
+  theme_minimal()
+
+
+```
+
+
+
+Loading the data that was pulled from the individual heatmaps
 ```{r}
 # naming of file needs to be 3 digit name + rep1/rep2 + cluster with 2 digits ex 06 or 12
 # remember to change the working directory/path/filenames so it fits the current analysis
