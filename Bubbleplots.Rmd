@@ -1,5 +1,5 @@
 ---
-title: "FerrajBubbleplot"
+title: "Bubbleplots"
 output: html_document
 date: "2024-06-14"
 ---
@@ -10,40 +10,38 @@ library('tidyverse')
 library('ggplot2')
 ```
 
-Loading in data and defining what is of interest
+Loading in data and implementing minor adjustments
+allInsertions should contain the column names which are of interest
 ```{r}
-#datafile and inserions for analysis
+# defining datafile and inserions for analysis
 Datafile <- 'BALBnotinBL6.txt'
-allInsertions <-  c('MTA_Mm;', 'IAP', 'RLTR10;', 'MT2_Mm;', 'RLTR17B_Mm;')
-#allInsertions <-  c('L1', 'ERVK', 'B2', 'B1',	'ERVL-MaLR',	'ERVL', 'ERV1', 'B4')
+#strain here defined by datafile name, but can be defined manually
 strain <- gsub("notinBL6.txt", "", Datafile)
+
+#allInsertions <-  c('MTA_Mm;', 'IAP', 'MT2_Mm;')
+#allInsertions <-  c('L1', 'ERVK', 'B2', 'B1',	'ERVL-MaLR',	'ERVL', 'ERV1', 'B4')
+allInsertions <-  c('MTA_Mm;', 'IAP', 'RLTR10;', 'MT2_Mm;', 'RLTR17B_Mm;')
 
 #load data
 table <- read_tsv(Datafile)
 allClusters <- 1:(nrow(table(table$Cluster)))
 
-#changeing names and depending on if cluster or group, rename
+#changing names and depending on if cluster or group, here renaming BL6 and utilizing the group column as cluster representative
 colnames(table)[colnames(table) == 'C57'] <- 'BL6'
 colnames(table)[colnames(table) == 'Group order'] <- 'group'
-table$cluster <- table$Cluster+1
+#table$cluster <- table$Cluster+1   
 table$cluster <- table$group
 
 ```
 
 
 The log2fold calculation
-
 ```{r}
-
-#filtering out insertions that does not belong to any group
 straintable <- table
-straintable$collected <- (straintable$L1 + straintable$ERVK + straintable$B2 + straintable$B1 + straintable$'ERVL-MaLR' + straintable$ERVL + straintable$ERV1 +straintable$B4)
-straintable <- straintable %>% filter(collected != 0)
-
 #calculating the average distribution across all clusters
 totalcounts <- sapply(allInsertions, function(col) sum(straintable[[col]], na.rm = FALSE))
 
-
+#initiating matrix
 globaldf <- data.frame(x=allInsertions, counts=totalcounts)
 finalmatrix <- matrix(0, nrow = length(allInsertions), ncol = length(allClusters))
 rownames(finalmatrix) <- allInsertions
@@ -57,10 +55,8 @@ for (INSx in allInsertions) {
       select('FVB', 'CBA', 'BALB', 'BL6', 'cluster', allInsertions) %>% filter(cluster == clusterx )
     
     counts <- sapply(allInsertions, function(col) sum(cluster1[[col]], na.rm = FALSE))
-    
     localdf <- data.frame(x=allInsertions, counts=counts)
     localdf <- localdf %>% mutate(across(where(is.numeric), ~ .x + 1)) #adding 1 to every value to avoid 0
-    
     globaldf$freq <- globaldf$counts/sum(globaldf$counts)
     totallocalcounts <- sum(localdf$counts)
     localdf$expectedcounts <- totallocalcounts*globaldf$freq
@@ -78,8 +74,7 @@ colnames(finaldf) <- c("INSx", "Clusterx", "Log2foldchange")
 
 ```
 
-Doing the statistical analysis 
-
+The statistical analysis 
 Warnings are silenced, as there will be warnings where it finds a 0.
 ```{r, warning=FALSE}
 
@@ -113,7 +108,6 @@ for (INSx in allInsertions) {
     
     df <- data.frame(list2, list4, list1, list3)
     names(df) <- c('INSin','INSout','nonINSin','nonINSout')
-    #df <- df %>% mutate(across(where(is.numeric), ~ .x + 1)) #adding 1 to every value to avoid 0
     df2 <- tibble(df)
     
     chi_square_results <- df2 %>% 
@@ -123,9 +117,7 @@ for (INSx in allInsertions) {
       ) %>% 
       ungroup() %>% 
       mutate(
-        chi_square_statistic = map_dbl(test_result, ~ .x$statistic),
-        p_value = map_dbl(test_result, ~ .x$p.value),
-        expected_frequencies = map(test_result, ~ .x$expected)
+        p_value = map_dbl(test_result, ~ .x$p.value)
       ) %>% 
       select(-test_result)
     
@@ -139,18 +131,16 @@ for (INSx in allInsertions) {
   }
 }
 
-#matrix with adjusted p-values:
+# matrix with adjusted p-values:
 p_vector <- as.vector(finalmatrix)
 
-# Step 2: Apply the p-value adjustment (Benjamini-Hochberg)
+# apply the p-value adjustment (Benjamini-Hochberg)
 p_adjusted_vector <- p.adjust(p_vector, method = "BH")
 
-# Step 3: Reshape the adjusted p-values vector back into the original matrix dimensions
+# reshaping the adjusted p-values vector back into the original matrix dimensions
 adjusted_p_matrix <- matrix(p_adjusted_vector, nrow = nrow(finalmatrix), ncol = ncol(finalmatrix))
 colnames(adjusted_p_matrix) <- allInsertions
 rownames(adjusted_p_matrix) <- allClusters
-
-
 
 finaldf2 <- as.data.frame(as.table(adjusted_p_matrix))
 
@@ -160,27 +150,11 @@ colnames(finaldf2) <- c("Clusterx2", "INSx2", "pvalue")
 ```
 
 
-Plots
 
+Merging data and creating plots
 ```{r}
 finaldf2$ID <- paste(finaldf2$Clusterx, finaldf2$INSx)
 finaldf$ID <- paste(finaldf$Clusterx, finaldf$INSx)
-
-
-df_merge <- merge(finaldf, finaldf2,by="ID") 
-
-colnames(df_merge)[colnames(df_merge) == 'Adjusted P-value'] <- 'pvalue'
-
-# Modify the significance column to numeric values
-df_merge$significance <- with(df_merge, ifelse(pvalue > 0.05, 0, ifelse(pvalue > 0.02, 1, ifelse(pvalue > 0.01, 2, 3))))
-
-```
-
-
-```{r}
-finaldf2$ID <- paste(finaldf2$Clusterx, finaldf2$INSx)
-finaldf$ID <- paste(finaldf$Clusterx, finaldf$INSx)
-
 
 df_merge <- merge(finaldf, finaldf2,by="ID") 
 
@@ -206,7 +180,7 @@ a <- ggplot(df_merge, aes(y = Clusterx, x = INSx, size = logsignificance)) +
 #  scale_size_continuous(range = c(1, 10)) +             # Adjust the range to control the size of the points for only one plot
   scale_y_reverse(breaks=1:20) +
   scale_size(range = c(1, 15), limits = c(0,20)) +  # this used to compare between plots. to make them comparable, range decides size and limits decides top value
-  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0) #Limit sets the top and bottom
+  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0) #Limit sets the top and bottom, but values that falls outside this category will be grey
 
 a
 
@@ -217,7 +191,7 @@ assign(plotname, a)
 
 ```
 
-If wanted:
+If desired:
 
 Plot, excluding clusters that has a size of 1:
 
@@ -240,7 +214,7 @@ a1 <- ggplot(df_merge2, aes(y = Clusterx, x = INSx, size = logsignificance)) +
 #  scale_size_continuous(range = c(1, 5)) +             # Adjust the range to control the size of the points for only one plot
   scale_y_reverse(breaks=1:20) +
   scale_size(range = c(1, 15), limits = c(0,20)) + # this used to compare between plots. to make them comparable, range decides size and limits decides top value
-  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0, limits = c(-2, 2))
+  scale_color_gradient2(low = "#762A83", mid = "white", high = "#1B7837", midpoint = 0, limits = c(-2, 2))
 
 a1
 } else {
@@ -250,6 +224,5 @@ a1 <- a
 a1
 
 ```
-
 
 
