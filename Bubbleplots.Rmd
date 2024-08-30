@@ -180,7 +180,7 @@ a <- ggplot(df_merge, aes(y = Clusterx, x = INSx, size = logsignificance)) +
 #  scale_size_continuous(range = c(1, 10)) +             # Adjust the range to control the size of the points for only one plot
   scale_y_reverse(breaks=1:20) +
   scale_size(range = c(1, 15), limits = c(0,20)) +  # this used to compare between plots. to make them comparable, range decides size and limits decides top value
-  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0) #Limit sets the top and bottom, but values that falls outside this category will be grey
+  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0, limits = c(-2, 2)) #Limit sets the top and bottom, but values that falls outside this category will be grey
 
 a
 
