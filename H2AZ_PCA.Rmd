@@ -1,0 +1,116 @@
+This is loading and analyzing the data to make PCA of the annotated genes
+
+Loading in packages and making a collected dataframe, where the duplicates within the clusters have been removed
+```{r}
+library('dplyr')
+library('tidyr')
+library('tidyverse')
+library('ggplot2')
+library('devtools')
+library('factoextra')
+library("ggfortify")
+library('pcaMethods')
+library('ggrepel')
+```
+
+
+```{r}
+GeneClustering <- read.csv("New order uTSS mm10 quant FPKM  - 1kb quantile corrected 10c.txt", sep = "\t")
+GeneAnnotations <- read.csv("dbtmee_cluster_gene_v2.tsv", sep = "\t")
+GeneAnnotations <- as.data.frame(GeneAnnotations)
+
+#removing duplicates from within the clusters
+GeneClustering_filtered <- GeneClustering %>% distinct(Group.order, Gene.Name, .keep_all = TRUE)
+names(GeneAnnotations)[names(GeneAnnotations) == 'Gene'] <- 'Gene.Name'
+
+
+head(GeneAnnotations)
+head(GeneClustering_filtered)
+```
+
+
+Here there are around 10k genes that are filtered out as there is no annotation for them
+```{r}
+mergedDF <- merge(GeneClustering_filtered, GeneAnnotations, by = "Gene.Name", all = FALSE)
+#mergedDF <- merge(GeneClustering_filtered, GeneAnnotations, by = "Gene.Name", all = TRUE)
+```
+
+Making a new dataframe only keeping the columns needed and then renaming them to fit the data
+(classification, cluster, group1, group2, group3, etc.)
+```{r}
+# df <- mergedDF %>% select("Cluster.y", "Order.based.on.stages", "Gene.Name", "X6.p7.Az.250.16_S14_R1_001", "X4.p10B.AZ.250.14_S10_R1_001", "X1.p12.AZ.200_S1_L001_R1_001_pooled", "X3.NSN.AZ.200_S3_L001_R1_001_pooled", "X4.SN.AZ.200_S4_L001_R1_001_pooled", "X5.MII.AZ.300_S5_L001_R1_001_pooled", "X8.8c.AZ.460_S8_L001_R1_001", "X11.mor.AZ460_S11_L001_R1_001", "X13.bla.AZ460_S13_L001_R1_001")
+
+ df <- mergedDF %>% select("Cluster.y", "Order.based.on.stages", "Gene.Name", "X6.p7.Az.250.16_S14_R1_001.quantile.normalised", "X4.p10B.AZ.250.14_S10_R1_001.quantile.normalised", "X1.p12.AZ.200_S1_L001_R1_001_pooled.quantile.normalised", "X3.NSN.AZ.200_S3_L001_R1_001_pooled.quantile.normalised", "X4.SN.AZ.200_S4_L001_R1_001_pooled.quantile.normalised", "X5.MII.AZ.300_S5_L001_R1_001_pooled.quantile.normalised", "X8.8c.AZ.460_S8_L001_R1_001.quantile.normalised", "X11.mor.AZ460_S11_L001_R1_001.quantile.normalised", "X13.bla.AZ460_S13_L001_R1_001.quantile.normalised")
+
+
+df <- setNames(df, c("Gene_type","Cluster","Gene_name", "P7", "P10", "P12", "NSN", "SN", "MII", "8cell", "Morula", "Blastocyst"))
+
+#names(mergedDF)
+```
+
+
+```{r}
+data <- df[,4:12]
+
+numerical_data <- apply(data, 2, function(x) as.numeric(gsub(",", ".", x)))
+```
+
+Using bioconductor:
+```{r}
+#pcoutput <- pca(t(numerical_data), nPcs = 10, scale = "uv", center = TRUE, cv ="none")
+
+pcoutput <- pca(t(numerical_data))
+dat <- as.data.frame(scores(pcoutput)[,1:2])
+dat$celltype <- rownames(dat)
+
+
+p <- ggplot(dat, aes(PC1, PC2, colour=celltype, label=celltype)) + 
+  geom_point(size=3) + 
+  geom_text_repel() + 
+  theme_minimal() +
+  xlab("PC1 39.6%") + 
+  ylab("PC2 21.9%")
+p
+
+
+```
+
+```{r}
+pcoutput
+```
+
+
+
+
+
+
+
+Using prinComp:
+```{r}
+data_normalized <- scale(numerical_data)
+
+data.pca <- princomp(numerical_data)
+
+```
+
+```{r}
+autoplot(data.pca)
+# Graph of the variables
+fviz_pca_var(data.pca, col.var = "black")
+fviz_pca_ind(data.pca)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
